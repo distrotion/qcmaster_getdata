@@ -33,6 +33,15 @@ const wrap = fn => async (req, res) => {
 // _conv = ConverstStr ฝั่ง frontend: เป็นตัวเลข (parse double ได้) -> ค่าเดิม, ไม่ใช่ -> '0'
 const _isNumeric = (s) => { if (s === null || s === undefined) return false; const x = `${s}`.trim(); return x !== '' && !isNaN(Number(x)); };
 const _conv = (v) => (_isNumeric(v) ? `${v}` : '0');
+// SPECIFICATIONve -> คอลัมน์ spec ตาม condition: BTW(max=BTW_HI,min=BTW_LOW), LOL<(max=LOL_H), HIM>(min=HIM_L), Actual/อื่นๆ=ไม่เอา
+function _specCols(spec) {
+  if (!spec || typeof spec !== 'object') return [];
+  const c = spec['condition'];
+  if (c === 'BTW') return [{ s: '-max', v: spec['BTW_HI'] }, { s: '-min', v: spec['BTW_LOW'] }];
+  if (c === 'LOL') return [{ s: '-max', v: spec['LOL_H'] }];
+  if (c === 'HIM') return [{ s: '-min', v: spec['HIM_L'] }];
+  return [];
+}
 function buildTable(input) {
   if (!Array.isArray(input) || input.length === 0) return [];
 
@@ -55,12 +64,9 @@ function buildTable(input) {
           }
         }
         header.push(`${cell['name']}(ALL-MEAN)`);
-        // SPECIFICATIONve เฉพาะ condition BTW -> เพิ่มคอลัมน์ max/min
-        let _sp = cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code];
-        if (_sp && typeof _sp === 'object' && _sp['condition'] === 'BTW') {
-          header.push(`${cell['name']}-max`);
-          header.push(`${cell['name']}-min`);
-        }
+        // SPECIFICATIONve -> คอลัมน์ max/min ตาม condition (BTW/LOL/HIM)
+        for (const sc of _specCols(cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code]))
+          header.push(`${cell['name']}${sc.s}`);
       } else if (fmt === 'Graph') {
         header.push(`${cell['name']}(X)`);
         header.push(`${cell['name']}(Y)`);
@@ -90,12 +96,9 @@ function buildTable(input) {
             for (let v = 0; v < cell['data'][k].length; v++)
               row.push(_conv(`${cell['data'][k][v]}`));
           row.push(`${cell['data_ans']}`);
-          // SPECIFICATIONve BTW -> ค่า max/min (ลำดับตรงกับ header)
-          let _sp = cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code];
-          if (_sp && typeof _sp === 'object' && _sp['condition'] === 'BTW') {
-            row.push(`${_sp['BTW_HI']}`);
-            row.push(`${_sp['BTW_LOW']}`);
-          }
+          // SPECIFICATIONve -> ค่า max/min ตาม condition (ลำดับตรงกับ header)
+          for (const sc of _specCols(cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code]))
+            row.push(`${sc.v}`);
         } else if (fmt === 'Graph') {
           row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['x'] : undefined}`));
           row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['y'] : undefined}`));
