@@ -30,7 +30,9 @@ const wrap = fn => async (req, res) => {
 
 // mode "table": แปลง dataolist -> ตาราง 2 มิติ (header + rows) แบบเดียวกับที่ frontend เคยทำ
 // (port มาจากฝั่ง Dart: Number -> PIC{k}-POINT{n}/MEAN + ALL-MEAN, Graph -> X/Y, OCR -> P1..P4)
-const _conv = (v) => `${v}`; // mirror ของ ConverstStr ฝั่ง frontend (ตอนนี้แปลงเป็น string ตรงๆ)
+// mirror ของ ConverstStr ฝั่ง frontend: เป็นตัวเลข (parse เป็น double ได้) -> คืนค่าเดิม, ไม่ใช่ -> '0'
+const _isNumeric = (s) => { if (s === null || s === undefined) return false; const x = `${s}`.trim(); return x !== '' && !isNaN(Number(x)); };
+const _conv = (v) => (_isNumeric(v) ? `${v}` : '0');
 function buildTable(input) {
   let header = ['PO', 'CUSTOMER', 'PART', 'PARTNAME', 'FG_CHARG', 'dateG'];
   let rows = [];
