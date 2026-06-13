@@ -15,31 +15,33 @@ const config = {
   }
 }
 
-// exports.qurey = async (input) => {
-//   try {
-//     await sql.connect(config)
-//     const result = await sql.query(input)
-//     //  console.dir(result)
-//     return result;
-//   } catch (err) {
-//     return "err";
-//   }
-// };
+// ใช้ connection pool ตัวเดียวร่วมกัน (เดิม connect/close ต่อ query ทำให้ pool ถูกปิดกลางคันเมื่อมี request พร้อมกัน)
+let poolPromise;
+function getPool() {
+  if (!poolPromise) {
+    poolPromise = new sql.ConnectionPool(config).connect()
+      .catch((err) => { poolPromise = null; throw err; });
+  }
+  return poolPromise;
+}
 
 exports.qurey = async (input) => {
   try {
-    await sql.connect(config)
-    const result = await sql.query(input).then((v) => {
-        // console.log(`---------------`);
-        // console.log(v);  
-        out = v;   
-        // console.log(`---------------`);
-        return v;
-      
-      }).then(() => sql.close())
-    
-      //  console.dir(result)
-      return out;
+    const pool = await getPool();
+    return await pool.request().query(input);
+  } catch (err) {
+    return err;
+  }
+};
+
+// query แบบ parameterized: ป้องกัน SQL injection
+// params = { name: value, ... } -> ใช้ @name ใน queryText
+exports.queryParams = async (queryText, params = {}) => {
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    for (const [key, value] of Object.entries(params)) request.input(key, value);
+    return await request.query(queryText);
   } catch (err) {
     return err;
   }

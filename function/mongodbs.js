@@ -43,14 +43,14 @@ exports.findsome = async (db_input, collection_input, input) => {
   return await collection.find(input).limit(500).sort({ "_id": -1 }).project({ "PO": 1, "CP": 1, "ALL_DONE": 1 }).toArray();
 };
 
-exports.update = async (server, db_input, collection_input, input1, input2) => {
-  const client = await getClient(server);
+exports.update = async (db_input, collection_input, input1, input2) => {
+  const client = await getClient(DEFAULT_URL);
   const collection = client.db(db_input).collection(collection_input);
   const res = await collection.updateOne(input1, input2);
   const logCollection = client.db('LOG').collection('UPDATE_LOG');
   await logCollection.insertOne({
     "timestamp": new Date(),
-    "server": server,
+    "server": DEFAULT_URL,
     "db": db_input,
     "collection": collection_input,
     "filter": input1,

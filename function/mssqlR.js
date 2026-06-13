@@ -15,27 +15,21 @@ const config = {
   }
 }
 
+// connection pool แยกของตัวเอง (เดิมใช้ sql.connect/sql.close global ร่วมกับ mssql.js ทำให้ชนกัน)
+let poolPromise;
+function getPool() {
+  if (!poolPromise) {
+    poolPromise = new sql.ConnectionPool(config).connect()
+      .catch((err) => { poolPromise = null; throw err; });
+  }
+  return poolPromise;
+}
+
 exports.qureyR = async (input) => {
   try {
-    await sql.connect(config)
-    
-    const result = await sql.query(input).then((v) => {
-      // console.log(`---------------`);
-      // console.log(v);  
-      out = v;   
-      // console.log(`---------------`);
-      return v;
-    
-    }).then(() => sql.close())
-  
-    //  console.dir(result)
-    return out;
+    const pool = await getPool();
+    return await pool.request().query(input);
   } catch (err) {
     return err;
   }
 };
-
-
-// .then((v) => console.log(v))
-//     .then(() => sql.close())
-
