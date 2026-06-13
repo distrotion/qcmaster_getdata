@@ -65,14 +65,14 @@ const STRIP_RAW_PIC = {
   },
 };
 
-exports.findReport = async (server, db_input, collection_input, input) => {
+exports.findReport = async (server, db_input, collection_input, input, limit) => {
   const client = await getClient(server);
   const collection = client.db(db_input).collection(collection_input);
-  return await collection.aggregate([
-    { $match: input },
-    { $addFields: { FINAL: STRIP_RAW_PIC } },
-    { $sort: { "_id": -1 } },
-  ]).toArray();
+  // เรียง _id ใหม่->เก่า ก่อน แล้วค่อย limit -> strip ทำเฉพาะ N ตัวที่เก็บ (ไม่เปลือง)
+  const pipeline = [{ $match: input }, { $sort: { "_id": -1 } }];
+  if (limit && limit > 0) pipeline.push({ $limit: limit });
+  pipeline.push({ $addFields: { FINAL: STRIP_RAW_PIC } });
+  return await collection.aggregate(pipeline).toArray();
 };
 
 exports.findsome = async (server, db_input, collection_input, input) => {

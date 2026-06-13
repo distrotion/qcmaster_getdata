@@ -70,9 +70,12 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
     // หา collection ทั้งหมดใน MAIN_DATA แบบ dynamic แล้ว find ทุกตัวพร้อมกันด้วยเงื่อนไขเดียวกัน
     // (เดิมฮาร์ดโค้ด MAIN + MAIN_271025 — งวดใหม่ต้องมาแก้โค้ดเอง)
     let collections = await mongodb.listCollections(headers['server'], MAIN_DATA);
+    // optional limit: ส่ง input.limit (จำนวน) -> เอาเฉพาะ N รายการล่าสุด ; ไม่ส่ง/<=0 = ทั้งหมด (เหมือนเดิม)
+    let limit = parseInt(input['limit']);
+    if (!(limit > 0)) limit = 0;
     // findReport = find + ตัดรูปดิบ PIC\d+ ออกฝั่ง server (payload เล็กลง ~15 เท่า, output เท่าเดิม)
     let perColl = await Promise.all(collections.map((coll) =>
-      mongodb.findReport(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date })
+      mongodb.findReport(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date }, limit)
     ));
     let allMATCP = perColl.flat();
 
@@ -89,6 +92,12 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
       }
     }
     let findMATCP = Array.from(byPO.values());
+
+    // limit mode: หลัง dedup เรียง _id ใหม่->เก่า แล้วเอา N ตัวแรก (ล่าสุดจริงทั้งชุด)
+    if (limit > 0) {
+      findMATCP.sort((a, b) => (String(a._id) < String(b._id) ? 1 : -1));
+      findMATCP = findMATCP.slice(0, limit);
+    }
 
     if (findPATTERN.length > 0) {
       let data = findPATTERN[0]['FINAL'];
