@@ -28,6 +28,79 @@ const wrap = fn => async (req, res) => {
   catch (err) { console.error('GETDATA ERROR', err); if (!res.headersSent) res.status(500).json({ error: err.message }); }
 };
 
+// mode "table": แปลง dataolist -> array ของ object { ชื่อฟิว(header): ค่า(value) }
+// header: Number -> PIC{k}-POINT{n}/MEAN + ALL-MEAN, Graph -> X/Y, OCR -> P1..P4 (อิงจาก record แรก)
+// _conv = ConverstStr ฝั่ง frontend: เป็นตัวเลข (parse double ได้) -> ค่าเดิม, ไม่ใช่ -> '0'
+const _isNumeric = (s) => { if (s === null || s === undefined) return false; const x = `${s}`.trim(); return x !== '' && !isNaN(Number(x)); };
+const _conv = (v) => (_isNumeric(v) ? `${v}` : '0');
+function buildTable(input) {
+  if (!Array.isArray(input) || input.length === 0) return [];
+
+  let itemlist = input[0]['itemlist'] || [];
+
+  // 1) รายชื่อคอลัมน์ (header) จาก record แรก
+  let header = ['PO', 'CUSTOMER', 'PART', 'PARTNAME', 'FG_CHARG', 'dateG'];
+  for (let j = 0; j < itemlist.length; j++) {
+    let code = `${itemlist[j]}`;
+    let cell = input[0][code];
+    if (cell != null) {
+      let fmt = `${cell['RESULTFORMAT']}`;
+      if (fmt === 'Number') {
+        for (let k = 0; k < cell['data'].length; k++) {
+          let num = 1;
+          for (let v = 0; v < cell['data'][k].length; v++) {
+            if (v !== cell['data'][k].length - 1) header.push(`${cell['name']}(PIC${k + 1}-POINT${num})`);
+            else header.push(`${cell['name']}(PIC${k + 1}-MEAN)`);
+            num++;
+          }
+        }
+        header.push(`${cell['name']}(ALL-MEAN)`);
+      } else if (fmt === 'Graph') {
+        header.push(`${cell['name']}(X)`);
+        header.push(`${cell['name']}(Y)`);
+      } else if (fmt === 'OCR') {
+        header.push(`${cell['name']}-P1`);
+        header.push(`${cell['name']}-P2`);
+        header.push(`${cell['name']}-P3`);
+        header.push(`${cell['name']}-P4`);
+      }
+    }
+  }
+
+  // 2) แต่ละ record -> เก็บค่าตามลำดับ แล้ว map เข้ากับ header เป็น object
+  let out = [];
+  for (let i = 0; i < input.length; i++) {
+    let row = [
+      `${input[i]['PO']}`, `${input[i]['CUSTOMER']}`, `${input[i]['PART']}`,
+      `${input[i]['PARTNAME']}`, `${input[i]['FG_CHARG']}`, `${input[i]['dateG']}`,
+    ];
+    for (let j = 0; j < itemlist.length; j++) {
+      let code = `${itemlist[j]}`;
+      let cell = input[i][code];
+      if (cell != null) {
+        let fmt = `${cell['RESULTFORMAT']}`;
+        if (fmt === 'Number') {
+          for (let k = 0; k < cell['data'].length; k++)
+            for (let v = 0; v < cell['data'][k].length; v++)
+              row.push(_conv(`${cell['data'][k][v]}`));
+          row.push(`${cell['data_ans']}`);
+        } else if (fmt === 'Graph') {
+          row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['x'] : undefined}`));
+          row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['y'] : undefined}`));
+        } else if (fmt === 'OCR') {
+          for (let k = 0; k < cell['data'].length; k++)
+            for (let v = 0; v < cell['data'][k].length; v++)
+              row.push(_conv(`${cell['data'][k][v]}`));
+        }
+      }
+    }
+    let obj = {};
+    for (let k = 0; k < header.length; k++) obj[header[k]] = row[k];
+    out.push(obj);
+  }
+  return out;
+}
+
 router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
   //-------------------------------------
   console.log(req.body);
@@ -308,6 +381,11 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
     }
 
     console.log(findMATCP.length);
+  }
+
+  // mode "table": คืน array ของ object { ชื่อฟิว: ค่า } ; ไม่ส่ง requst = คืน dataolist เหมือนเดิม
+  if (input['requst'] === 'table') {
+    return res.json(buildTable(dataolist));
   }
 
   output = dataolist
