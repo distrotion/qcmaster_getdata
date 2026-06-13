@@ -55,6 +55,12 @@ function buildTable(input) {
           }
         }
         header.push(`${cell['name']}(ALL-MEAN)`);
+        // SPECIFICATIONve เฉพาะ condition BTW -> เพิ่มคอลัมน์ max/min
+        let _sp = cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code];
+        if (_sp && typeof _sp === 'object' && _sp['condition'] === 'BTW') {
+          header.push(`${cell['name']}-max`);
+          header.push(`${cell['name']}-min`);
+        }
       } else if (fmt === 'Graph') {
         header.push(`${cell['name']}(X)`);
         header.push(`${cell['name']}(Y)`);
@@ -84,6 +90,12 @@ function buildTable(input) {
             for (let v = 0; v < cell['data'][k].length; v++)
               row.push(_conv(`${cell['data'][k][v]}`));
           row.push(`${cell['data_ans']}`);
+          // SPECIFICATIONve BTW -> ค่า max/min (ลำดับตรงกับ header)
+          let _sp = cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code];
+          if (_sp && typeof _sp === 'object' && _sp['condition'] === 'BTW') {
+            row.push(`${_sp['BTW_HI']}`);
+            row.push(`${_sp['BTW_LOW']}`);
+          }
         } else if (fmt === 'Graph') {
           row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['x'] : undefined}`));
           row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['y'] : undefined}`));
