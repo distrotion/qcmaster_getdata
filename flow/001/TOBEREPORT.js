@@ -70,8 +70,9 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
     // หา collection ทั้งหมดใน MAIN_DATA แบบ dynamic แล้ว find ทุกตัวพร้อมกันด้วยเงื่อนไขเดียวกัน
     // (เดิมฮาร์ดโค้ด MAIN + MAIN_271025 — งวดใหม่ต้องมาแก้โค้ดเอง)
     let collections = await mongodb.listCollections(headers['server'], MAIN_DATA);
+    // findReport = find + ตัดรูปดิบ PIC\d+ ออกฝั่ง server (payload เล็กลง ~15 เท่า, output เท่าเดิม)
     let perColl = await Promise.all(collections.map((coll) =>
-      mongodb.find(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date })
+      mongodb.findReport(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date })
     ));
     let allMATCP = perColl.flat();
 

@@ -27,7 +27,7 @@ async function getClient(server) {
     const client = new MongoClient(url, {
       connectTimeoutMS: 3000,
       serverSelectionTimeoutMS: 3000,
-      socketTimeoutMS: 5000,
+      socketTimeoutMS: 120000, // เดิม 5000 ต่ำเกินไป -> query ที่ดึงข้อมูลเยอะถูกตัดทิ้งก่อนเสร็จ
     });
     try {
       await client.connect();
@@ -52,6 +52,27 @@ exports.find = async (server, db_input, collection_input, input, projection) => 
   let cursor = collection.find(input).limit(0).sort({ "_id": -1 });
   if (projection) cursor = cursor.project(projection);
   return await cursor.toArray();
+};
+
+// สำหรับหน้ารายงาน: find + ตัดรูปดิบ PIC1..PICn (key /^PIC\d+$/) ออกจาก FINAL ฝั่ง server
+// (รายงานไม่เคยใช้ PIC\d+ — Number/Graph ใช้ PO3, OCR ใช้ PIC\d+data) -> payload เล็กลง ~15 เท่า
+// อ่านอย่างเดียว ไม่แก้ document ใน DB
+const STRIP_RAW_PIC = {
+  $function: {
+    body: "function(final){ function strip(o){ if(o && typeof o==='object'){ for(const k of Object.keys(o)){ if(/^PIC[0-9]+$/.test(k)){ delete o[k]; } else { strip(o[k]); } } } } strip(final); return final; }",
+    args: ["$FINAL"],
+    lang: "js",
+  },
+};
+
+exports.findReport = async (server, db_input, collection_input, input) => {
+  const client = await getClient(server);
+  const collection = client.db(db_input).collection(collection_input);
+  return await collection.aggregate([
+    { $match: input },
+    { $addFields: { FINAL: STRIP_RAW_PIC } },
+    { $sort: { "_id": -1 } },
+  ]).toArray();
 };
 
 exports.findsome = async (server, db_input, collection_input, input) => {
