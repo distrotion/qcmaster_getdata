@@ -45,22 +45,20 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
   let SPECIFICATIONve = {};
 
 
-  if (headers['server'] !== undefined && input['MATCP'] != undefined && input['STARTyear'] != undefined && input['STARTmonth'] != undefined && input['STARTday'] != undefined && input['ENDyear'] != undefined && input['ENDmonth'] != undefined && input['ENDday'] != undefined && input['DB'] != undefined) {
+  if (headers['server'] !== undefined && input['MATCP'] != undefined) {
 
 
 
-    let d = new Date();
-    d.setFullYear(input['STARTyear'], `${parseInt(input['STARTmonth']) - 1}`, input['STARTday']);
-
-    let dc = new Date();
-    dc.setFullYear(input['ENDyear'], `${parseInt(input['ENDmonth']) - 1}`, input['ENDday']);
-
-    // console.log(d)
-    // console.log(dc)
-
-    let date = {
-      "$gte": d,
-      "$lt": dc
+    // auto-detect mode: ส่งช่วงวันที่ครบ -> กรองด้วย dateG ; ไม่ส่งวันที่ -> ข้ามตัวกรองวันที่ (ใช้ limit เอา N ล่าสุดแทน)
+    let query = { "MATCP": input['MATCP'], "ALL_DONE": "DONE" };
+    let hasDate = input['STARTyear'] != undefined && input['STARTmonth'] != undefined && input['STARTday'] != undefined
+      && input['ENDyear'] != undefined && input['ENDmonth'] != undefined && input['ENDday'] != undefined;
+    if (hasDate) {
+      let d = new Date();
+      d.setFullYear(input['STARTyear'], `${parseInt(input['STARTmonth']) - 1}`, input['STARTday']);
+      let dc = new Date();
+      dc.setFullYear(input['ENDyear'], `${parseInt(input['ENDmonth']) - 1}`, input['ENDday']);
+      query["dateG"] = { "$gte": d, "$lt": dc };
     }
 
     let findITEMs = await mongodb.find(headers['server'],master_FN, ITEMs, {});
@@ -75,7 +73,7 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
     if (!(limit > 0)) limit = 0;
     // findReport = find + ตัดรูปดิบ PIC\d+ ออกฝั่ง server (payload เล็กลง ~15 เท่า, output เท่าเดิม)
     let perColl = await Promise.all(collections.map((coll) =>
-      mongodb.findReport(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date }, limit)
+      mongodb.findReport(headers['server'], MAIN_DATA, coll, query, limit)
     ));
     let allMATCP = perColl.flat();
 
