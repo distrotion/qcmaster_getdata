@@ -72,6 +72,14 @@ exports.findallC = async (server, db_input) => {
   return res;
 };
 
+// คืนรายชื่อ collection ทั้งหมดในฐานข้อมูล (ไม่ดึง document)
+exports.listCollections = async (server, db_input) => {
+  const client = await getClient(server);
+  const db = client.db(db_input);
+  const collections = await db.listCollections().toArray();
+  return collections.map((coll) => coll.name);
+};
+
 exports.update = async (server, db_input, collection_input, input1, input2) => {
   const client = await getClient(server);
   const collection = client.db(db_input).collection(collection_input);

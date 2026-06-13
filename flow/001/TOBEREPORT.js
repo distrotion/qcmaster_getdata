@@ -22,7 +22,13 @@ let ITEMs = 'ITEMs';
 
 
 
-router.post('/TOBEREPOR/GETDATA', async (req, res) => {
+// ครอบ handler: error -> ตอบ 500 แทนการค้าง (เช่น record ไม่มี FINAL_ANS / OCR ไม่มี PSC1)
+const wrap = fn => async (req, res) => {
+  try { await fn(req, res); }
+  catch (err) { console.error('GETDATA ERROR', err); if (!res.headersSent) res.status(500).json({ error: err.message }); }
+};
+
+router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
   //-------------------------------------
   console.log(req.body);
   let input = req.body;
@@ -39,7 +45,7 @@ router.post('/TOBEREPOR/GETDATA', async (req, res) => {
   let SPECIFICATIONve = {};
 
 
-  if (input['MATCP'] != undefined && input['STARTyear'] != undefined && input['STARTmonth'] != undefined && input['STARTday'] != undefined && input['ENDyear'] != undefined && input['ENDmonth'] != undefined && input['ENDday'] != undefined && input['DB'] != undefined) {
+  if (headers['server'] !== undefined && input['MATCP'] != undefined && input['STARTyear'] != undefined && input['STARTmonth'] != undefined && input['STARTday'] != undefined && input['ENDyear'] != undefined && input['ENDmonth'] != undefined && input['ENDday'] != undefined && input['DB'] != undefined) {
 
 
 
@@ -61,18 +67,27 @@ router.post('/TOBEREPOR/GETDATA', async (req, res) => {
     let findPATTERN = await mongodb.find(headers['server'],PATTERN, PATTERN_01, { "CP": input['MATCP'] });
 
 
-    let inMAINDB = 'MAIN';
-    let findMATCP1 = await mongodb.find(headers['server'],MAIN_DATA, inMAINDB, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date });
-    inMAINDB = 'MAIN_271025';
-    let findMATCP2 = await mongodb.find(headers['server'],MAIN_DATA, inMAINDB, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date });
+    // หา collection ทั้งหมดใน MAIN_DATA แบบ dynamic แล้ว find ทุกตัวพร้อมกันด้วยเงื่อนไขเดียวกัน
+    // (เดิมฮาร์ดโค้ด MAIN + MAIN_271025 — งวดใหม่ต้องมาแก้โค้ดเอง)
+    let collections = await mongodb.listCollections(headers['server'], MAIN_DATA);
+    let perColl = await Promise.all(collections.map((coll) =>
+      mongodb.find(headers['server'], MAIN_DATA, coll, { "MATCP": input['MATCP'], "ALL_DONE": "DONE", "dateG": date })
+    ));
+    let allMATCP = perColl.flat();
 
-    let merged = [...findMATCP1, ...findMATCP2];
-    let seen = new Set();
-    let findMATCP = merged.filter(item => {
-      if (seen.has(item.PO)) return false; // id ซ้ำ — ตัดทิ้ง (ของ list หลัง)
-      seen.add(item.PO);
-      return true;
-    });
+    // dedup ด้วย PO: ถ้า PO ซ้ำข้าม collection ให้เก็บ doc ที่ _id ใหม่สุดเสมอ
+    // (ObjectId เรียงตามเวลาที่สร้าง — _id มากกว่า = ใหม่กว่า) ผลลัพธ์ PO จึงไม่ซ้ำกัน
+    let byPO = new Map();
+    for (let i = 0; i < allMATCP.length; i++) {
+      let doc = allMATCP[i];
+      // ถ้า PO undefined/null ใช้ _id เป็น key กันถูกยุบรวมเหลือตัวเดียว
+      let key = (doc.PO !== undefined && doc.PO !== null) ? doc.PO : `__noPO_${doc._id}`;
+      let existing = byPO.get(key);
+      if (!existing || String(doc._id) > String(existing._id)) {
+        byPO.set(key, doc);
+      }
+    }
+    let findMATCP = Array.from(byPO.values());
 
     if (findPATTERN.length > 0) {
       let data = findPATTERN[0]['FINAL'];
@@ -291,7 +306,7 @@ router.post('/TOBEREPOR/GETDATA', async (req, res) => {
 
   //-------------------------------------
   res.json(output);
-});
+}));
 
 
 module.exports = router;
