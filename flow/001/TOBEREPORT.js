@@ -67,6 +67,7 @@ function buildTable(input) {
         // SPECIFICATIONve -> คอลัมน์ max/min ตาม condition (BTW/LOL/HIM)
         for (const sc of _specCols(cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code]))
           header.push(`${cell['name']}${sc.s}`);
+        header.push(`${cell['name']}(หน่วย)`);   // หน่วยวัด (HRC/HMV จาก PO2)
       } else if (fmt === 'Graph') {
         header.push(`${cell['name']}(X)`);
         header.push(`${cell['name']}(Y)`);
@@ -79,39 +80,51 @@ function buildTable(input) {
     }
   }
 
-  // 2) แต่ละ record -> เก็บค่าตามลำดับ แล้ว map เข้ากับ header เป็น object
+  // 2) แต่ละ record -> สร้าง object โดยอ้าง "ชื่อคอลัมน์" ตรง ๆ (กัน misalign เมื่อจำนวนจุด/PIC ต่อแถวไม่เท่า record แรก)
+  //    เดิม push เป็น array แล้ว map ตามตำแหน่ง → แถวที่จุดไม่เท่า header เลื่อน → -max/-min ได้ค่าจริงปน
   let out = [];
   for (let i = 0; i < input.length; i++) {
-    let row = [
-      `${input[i]['PO']}`, `${input[i]['CUSTOMER']}`, `${input[i]['PART']}`,
-      `${input[i]['PARTNAME']}`, `${input[i]['FG_CHARG']}`, `${input[i]['dateG']}`,
-    ];
+    let obj = {
+      'PO': `${input[i]['PO']}`, 'CUSTOMER': `${input[i]['CUSTOMER']}`, 'PART': `${input[i]['PART']}`,
+      'PARTNAME': `${input[i]['PARTNAME']}`, 'FG_CHARG': `${input[i]['FG_CHARG']}`, 'dateG': `${input[i]['dateG']}`,
+    };
     for (let j = 0; j < itemlist.length; j++) {
       let code = `${itemlist[j]}`;
       let cell = input[i][code];
-      if (cell != null) {
-        let fmt = `${cell['RESULTFORMAT']}`;
-        if (fmt === 'Number') {
-          for (let k = 0; k < cell['data'].length; k++)
-            for (let v = 0; v < cell['data'][k].length; v++)
-              row.push(_conv(`${cell['data'][k][v]}`));
-          row.push(`${cell['data_ans']}`);
-          // SPECIFICATIONve -> ค่า max/min ตาม condition (ลำดับตรงกับ header)
-          for (const sc of _specCols(cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code]))
-            row.push(`${sc.v}`);
-        } else if (fmt === 'Graph') {
-          row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['x'] : undefined}`));
-          row.push(_conv(`${cell['data_ans'] ? cell['data_ans']['y'] : undefined}`));
-        } else if (fmt === 'OCR') {
-          for (let k = 0; k < cell['data'].length; k++)
-            for (let v = 0; v < cell['data'][k].length; v++)
-              row.push(_conv(`${cell['data'][k][v]}`));
+      if (cell == null) continue;
+      let fmt = `${cell['RESULTFORMAT']}`;
+      let name = `${cell['name']}`;
+      if (fmt === 'Number') {
+        for (let k = 0; k < cell['data'].length; k++) {
+          let num = 1;
+          const lastV = cell['data'][k].length - 1;
+          for (let v = 0; v < cell['data'][k].length; v++) {
+            const col = (v !== lastV) ? `${name}(PIC${k + 1}-POINT${num})` : `${name}(PIC${k + 1}-MEAN)`;
+            obj[col] = _conv(`${cell['data'][k][v]}`);
+            num++;
+          }
         }
+        obj[`${name}(ALL-MEAN)`] = `${cell['data_ans']}`;
+        // SPECIFICATIONve -> ค่า max/min (อ้างชื่อคอลัมน์ → คงที่/ตรงเสมอ)
+        for (const sc of _specCols(cell['SPECIFICATIONve'] && cell['SPECIFICATIONve'][code]))
+          obj[`${name}${sc.s}`] = `${sc.v}`;
+        obj[`${name}(หน่วย)`] = `${cell['unit'] != null ? cell['unit'] : ''}`;   // หน่วยวัด
+      } else if (fmt === 'Graph') {
+        obj[`${name}(X)`] = _conv(`${cell['data_ans'] ? cell['data_ans']['x'] : undefined}`);
+        obj[`${name}(Y)`] = _conv(`${cell['data_ans'] ? cell['data_ans']['y'] : undefined}`);
+      } else if (fmt === 'OCR') {
+        let idx = 1;   // header = -P1..-P4 (4 ช่อง) → เติมตามจริง สูงสุด 4
+        for (let k = 0; k < cell['data'].length; k++)
+          for (let v = 0; v < cell['data'][k].length; v++) {
+            if (idx <= 4) obj[`${name}-P${idx}`] = _conv(`${cell['data'][k][v]}`);
+            idx++;
+          }
       }
     }
-    let obj = {};
-    for (let k = 0; k < header.length; k++) obj[header[k]] = row[k];
-    out.push(obj);
+    // เรียงตาม header (เฉพาะคอลัมน์ใน header · ขาด = '') → ทุกแถวมีคอลัมน์ตรงกัน
+    let final = {};
+    for (let k = 0; k < header.length; k++) final[header[k]] = obj[header[k]] !== undefined ? obj[header[k]] : '';
+    out.push(final);
   }
   return out;
 }
@@ -412,3 +425,5 @@ router.post('/TOBEREPOR/GETDATA', wrap(async (req, res) => {
 
 
 module.exports = router;
+// export buildTable ให้ flow อื่น (SCOPEREPORT) reuse ฟอร์แมตตารางตัวเดียวกัน
+module.exports.buildTable = buildTable;

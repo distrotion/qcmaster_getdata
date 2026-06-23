@@ -93,6 +93,13 @@ exports.findallC = async (server, db_input) => {
   return res;
 };
 
+// distinct ค่าของ field เดียว (เบา · ใช้ทำ dropdown เช่น CUSTOMER) — server-side distinct
+exports.distinct = async (server, db_input, collection_input, field, input) => {
+  const client = await getClient(server);
+  const collection = client.db(db_input).collection(collection_input);
+  return await collection.distinct(field, input || {});
+};
+
 // คืนรายชื่อ collection ทั้งหมดในฐานข้อมูล (ไม่ดึง document)
 exports.listCollections = async (server, db_input) => {
   const client = await getClient(server);
